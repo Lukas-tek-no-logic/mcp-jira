@@ -120,6 +120,60 @@ Config location:
 }
 ```
 
+### Codex CLI
+
+Codex CLI supports local STDIO MCP servers. First install `mcp-jira` globally:
+
+```bash
+npm install -g git+https://github.com/Lukas-tek-no-logic/mcp-jira.git
+```
+
+Then add the server. Replace the example values with your Jira URL and Personal
+Access Token:
+
+```bash
+codex mcp add jira \
+  --env JIRA_BASE_URL="https://jira.your-company.com" \
+  --env JIRA_TOKEN="your-personal-access-token" \
+  -- mcp-jira
+```
+
+Verify that Codex can see the configuration:
+
+```bash
+codex mcp list
+```
+
+Inside an interactive Codex CLI session, use `/mcp` to view the active server.
+
+Alternatively, add this configuration directly to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.jira]
+command = "mcp-jira"
+
+[mcp_servers.jira.env]
+JIRA_BASE_URL = "https://jira.your-company.com"
+JIRA_TOKEN = "your-personal-access-token"
+```
+
+### Codex Desktop
+
+Codex Desktop uses the same MCP configuration as Codex CLI. You can therefore
+configure the server with the CLI command or `config.toml` shown above, then
+restart Codex Desktop.
+
+You can also configure it in the app:
+
+1. Install the package globally with the `npm install -g` command above.
+2. Open **Settings** → **MCP servers** and select **Add server**.
+3. Choose **STDIO**, name the server `jira`, and set the command to `mcp-jira`.
+4. Add the environment variables `JIRA_BASE_URL` and `JIRA_TOKEN` with your
+   Jira URL and Personal Access Token.
+5. Save and restart Codex Desktop.
+
+After restart, type `/mcp` in the composer to confirm that `jira` is connected.
+
 ## Available Tools
 
 | Tool | Description |
