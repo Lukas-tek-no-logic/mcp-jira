@@ -120,6 +120,84 @@ Config location:
 }
 ```
 
+## Alternative: Run MCP Atlassian locally with Docker HTTP
+
+This alternative runs [MCP Atlassian](https://github.com/sooperset/mcp-atlassian)
+as a local Streamable HTTP server. It is useful when an MCP client connects to
+a URL instead of launching a local STDIO command.
+
+### 1. Create a local credentials file
+
+In an empty local directory, create and edit `.env`:
+
+```bash
+code .env
+```
+
+For Jira Server or Data Center, add your Jira URL and Personal Access Token:
+
+```ini
+JIRA_URL=https://jira.your-company.com
+JIRA_PERSONAL_TOKEN=TU_WKLEJ_PAT
+JIRA_SSL_VERIFY=true
+ALLOW_GLOBAL_CRED_FALLBACK=true
+```
+
+Replace `TU_WKLEJ_PAT` with your own token. Do not commit `.env` to Git or
+share it: the file grants the container access to Jira with your permissions.
+`ALLOW_GLOBAL_CRED_FALLBACK=true` permits a local MCP client without a
+per-request credential to use the Jira credentials in this file.
+
+### 2. Download and test the image
+
+```bash
+docker pull ghcr.io/sooperset/mcp-atlassian:latest
+```
+
+To verify the credentials and server startup over STDIO, run:
+
+```bash
+docker run --rm -i --env-file .env ghcr.io/sooperset/mcp-atlassian:latest
+```
+
+The process waits for MCP input; use `Ctrl+C` after confirming it has started.
+
+### 3. Start the local HTTP MCP service
+
+Run the Streamable HTTP service on port 9000:
+
+```bash
+docker run --rm -p 127.0.0.1:9000:9000 --env-file .env ghcr.io/sooperset/mcp-atlassian:latest --transport streamable-http --stateless --port 9000
+```
+
+Configure your MCP client to use this URL:
+
+```text
+http://127.0.0.1:9000/mcp
+```
+
+For example, add this to Codex's `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.jira_http]
+url = "http://127.0.0.1:9000/mcp"
+```
+
+For another MCP-capable client, create a Streamable HTTP server entry using
+the same URL. Keep the Docker container running while the client uses Jira.
+
+### Security note
+
+Use `127.0.0.1:9000:9000` exactly as shown so Docker exposes the service only
+to this computer. Do not use `-p 9000:9000` or publish this service through a
+tunnel or reverse proxy unless you remove `ALLOW_GLOBAL_CRED_FALLBACK` and add
+proper client authentication.
+
+Before using HTTP transport, verify that the image contains MCP Atlassian
+version 0.22.0 or later. Earlier versions have a critical authentication flaw
+in HTTP mode. The `latest` tag changes over time, so use a current patched
+image and keep it updated.
+
 ## Available Tools
 
 | Tool | Description |
