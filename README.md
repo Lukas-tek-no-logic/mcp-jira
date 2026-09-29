@@ -120,6 +120,67 @@ Config location:
 }
 ```
 
+## Alternative: Docker MCP Toolkit with MCP Atlassian
+
+Instead of installing this package directly, you can run the
+[MCP Atlassian](https://github.com/sooperset/mcp-atlassian) server through
+Docker Desktop's **MCP Toolkit**. This option centralizes server configuration
+in Docker, then lets you connect the same profile to Codex or Claude Code.
+
+> **Note:** MCP Toolkit is a Docker Desktop beta feature. The current Toolkit
+> interface described below requires Docker Desktop 4.62 or later.
+
+1. Install and open Docker Desktop.
+2. In **Settings** → **Beta features**, enable **Docker MCP Toolkit** and
+   select **Apply**.
+3. Open **MCP Toolkit** → **Profiles** and create or select a profile for your
+   Jira integration.
+4. Open the **Catalog**, search for **MCP Atlassian** (the server from
+   `sooperset/mcp-atlassian`), and add it to the profile.
+5. Open the server configuration and set the variables for your Jira deployment.
+
+For Jira Cloud, configure:
+
+```text
+JIRA_URL=https://your-company.atlassian.net
+JIRA_USERNAME=your.email@company.com
+JIRA_API_TOKEN=your-api-token
+```
+
+For Jira Server or Data Center, configure:
+
+```text
+JIRA_URL=https://jira.your-company.com
+JIRA_PERSONAL_TOKEN=your-personal-access-token
+```
+
+Keep tokens private: do not commit them to a repository or put them in project
+configuration files. If you use a self-signed Jira certificate, consult the
+MCP Atlassian documentation before disabling SSL verification.
+
+After saving the server configuration, restart Docker Desktop so that the
+Toolkit reloads the profile and server configuration.
+
+### Connect the Docker profile to Codex or Claude Code
+
+1. In Docker Desktop, open **MCP Toolkit** → **Clients**.
+2. Find **Codex** or **Claude Code** and select **Connect** for the profile.
+3. Restart the client after Docker has added the `MCP_DOCKER` gateway.
+
+Verify the connection with one of these commands:
+
+```bash
+# Codex
+codex mcp list
+
+# Claude Code
+claude mcp list
+```
+
+Both clients connect to the Docker gateway instead of directly to the
+Atlassian server. This makes the Docker profile reusable across clients and
+keeps the server setup in one place.
+
 ## Available Tools
 
 | Tool | Description |
