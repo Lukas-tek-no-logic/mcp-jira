@@ -131,6 +131,7 @@ Config location:
 | `get_issue` | Get full issue details + auto-downloads image attachments |
 | `create_issue` | Create a new issue |
 | `update_issue` | Update an existing issue |
+| `move_issue` | Move an issue to another project (copy with comments, attachments and links, link to original, close original) |
 | `get_comments` | Get comments on an issue |
 | `add_comment` | Add a comment to an issue |
 | `edit_comment` | Edit an existing comment on an issue |

@@ -47,6 +47,7 @@ Each file exports a `register*Tools(server, jira)` function that registers relat
 | `boards.ts` | `list_boards`, `get_sprints` |
 | `attachments.ts` | `list_attachments`, `get_attachment` |
 | `tempo.ts` | `log_work`, `get_worklogs`, `delete_worklog` |
+| `move.ts` | `move_issue` (clone to another project, link, close original) |
 
 ### Patterns
 
