@@ -42,7 +42,7 @@ Each file exports a `register*Tools(server, jira)` function that registers relat
 |---|---|
 | `projects.ts` | `list_projects`, `get_project` |
 | `issues.ts` | `search_issues` (JQL), `find_issues` (full-text), `get_issue`, `create_issue`, `update_issue` |
-| `comments.ts` | `get_comments`, `add_comment` |
+| `comments.ts` | `get_comments`, `add_comment`, `edit_comment`, `delete_comment` |
 | `transitions.ts` | `get_transitions`, `transition_issue` |
 | `boards.ts` | `list_boards`, `get_sprints` |
 | `attachments.ts` | `list_attachments`, `get_attachment` |

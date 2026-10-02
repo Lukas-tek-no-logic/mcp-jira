@@ -133,6 +133,8 @@ Config location:
 | `update_issue` | Update an existing issue |
 | `get_comments` | Get comments on an issue |
 | `add_comment` | Add a comment to an issue |
+| `edit_comment` | Edit an existing comment on an issue |
+| `delete_comment` | Delete a comment from an issue |
 | `get_transitions` | Get available status transitions |
 | `transition_issue` | Change issue status |
 | `list_attachments` | List attachments on an issue |
