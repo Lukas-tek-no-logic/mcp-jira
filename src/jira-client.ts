@@ -64,11 +64,12 @@ export class JiraClient {
     const { readFileSync } = await import("fs");
     const { basename } = await import("path");
 
-    const filename = basename(filePath);
-    const buffer = readFileSync(filePath);
+    return this.uploadAttachmentData(issueKey, basename(filePath), readFileSync(filePath));
+  }
 
+  async uploadAttachmentData(issueKey: string, filename: string, buffer: Buffer): Promise<any[]> {
     const formData = new FormData();
-    const blob = new Blob([buffer]);
+    const blob = new Blob([new Uint8Array(buffer)]);
     formData.append("file", blob, filename);
 
     const url = `${this.baseUrl}/rest/api/2/issue/${encodeURIComponent(issueKey)}/attachments`;
