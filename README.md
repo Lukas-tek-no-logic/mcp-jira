@@ -140,6 +140,7 @@ Config location:
 | `transition_issue` | Change issue status |
 | `list_attachments` | List attachments on an issue |
 | `get_attachment` | Download and display a specific image attachment |
+| `delete_attachment` | Delete an attachment from an issue (by ID or unique filename) |
 | `list_boards` | List Scrum/Kanban boards |
 | `get_sprints` | Get sprints for a board |
 | `log_work` | Log time on an issue via Tempo (e.g. "2h 30m") |

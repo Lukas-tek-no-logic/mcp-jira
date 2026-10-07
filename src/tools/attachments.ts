@@ -105,4 +105,48 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
       return { content: [{ type: "text", text: `Uploaded: ${names}` }] };
     }
   );
+
+  server.tool(
+    "delete_attachment",
+    "Delete an attachment from a Jira issue, by attachment ID or by filename",
+    {
+      issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
+      attachmentId: z.string().optional().describe("The attachment ID (from list_attachments)"),
+      filename: z.string().optional().describe("Attachment filename. Must match exactly one attachment on the issue."),
+    },
+    async ({ issueKey, attachmentId, filename }) => {
+      if (!attachmentId && !filename) {
+        return { content: [{ type: "text", text: "Provide attachmentId or filename." }] };
+      }
+
+      const issue = await jira.get<any>(
+        `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=attachment`
+      );
+      const attachments: any[] = issue.fields.attachment || [];
+
+      let matches: any[];
+      if (attachmentId) {
+        matches = attachments.filter((a: any) => a.id === attachmentId);
+      } else {
+        matches = attachments.filter((a: any) => a.filename === filename);
+      }
+
+      if (matches.length === 1) {
+        const target = matches[0];
+        await jira.delete<void>(`/rest/api/2/attachment/${encodeURIComponent(target.id)}`);
+        return {
+          content: [{ type: "text", text: `Deleted attachment ${target.filename} (id: ${target.id}) from ${issueKey}` }],
+        };
+      } else {
+        let reason: string;
+        if (matches.length === 0) {
+          reason = "Attachment not found on this issue.";
+        } else {
+          reason = `Several attachments are named "${filename}". Use attachmentId.`;
+        }
+        const names = attachments.map((a: any) => `${a.filename} (id: ${a.id}, created: ${a.created})`);
+        return { content: [{ type: "text", text: `${reason} Available:\n${names.join("\n")}` }] };
+      }
+    }
+  );
 }
