@@ -1,0 +1,57 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { JiraClient } from "../jira-client.js";
+import { createLink } from "./move.js";
+
+export function registerLinkTools(server: McpServer, jira: JiraClient) {
+  server.tool(
+    "link_issues",
+    "Create a link between two Jira issues (same as More → Link in the Jira UI). " +
+      "The link reads: <inwardIssue> <outward description> <outwardIssue>, e.g. PROJ-2 blocks PROJ-1",
+    {
+      inwardIssue: z.string().describe("Key of the inward issue (e.g. PROJ-2)"),
+      outwardIssue: z.string().describe("Key of the outward issue (e.g. PROJ-1)"),
+      linkType: z.string().default("Relates").describe("Name of the issue link type (e.g. Relates, Blocks, Duplicate)"),
+    },
+    async ({ inwardIssue, outwardIssue, linkType }) => {
+      await createLink(jira, linkType, inwardIssue, outwardIssue);
+      return { content: [{ type: "text", text: `Linked ${inwardIssue} -[${linkType}]-> ${outwardIssue}` }] };
+    }
+  );
+
+  server.tool(
+    "get_issue_links",
+    "Get only the issue links of a Jira issue: linked issue key, link type and direction. " +
+      "Much smaller than get_issue",
+    { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+    async ({ issueKey }) => {
+      const issue = await jira.get<any>(
+        `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=issuelinks`
+      );
+      const links = (issue.fields.issuelinks || []).map((link: any) => {
+        if (link.outwardIssue) {
+          return {
+            id: link.id,
+            type: link.type.name,
+            direction: "outward",
+            relation: link.type.outward,
+            key: link.outwardIssue.key,
+            summary: link.outwardIssue.fields?.summary,
+            status: link.outwardIssue.fields?.status?.name,
+          };
+        } else {
+          return {
+            id: link.id,
+            type: link.type.name,
+            direction: "inward",
+            relation: link.type.inward,
+            key: link.inwardIssue.key,
+            summary: link.inwardIssue.fields?.summary,
+            status: link.inwardIssue.fields?.status?.name,
+          };
+        }
+      });
+      return { content: [{ type: "text", text: JSON.stringify(links, null, 2) }] };
+    }
+  );
+}
