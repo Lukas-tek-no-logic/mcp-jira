@@ -132,6 +132,8 @@ Config location:
 | `create_issue` | Create a new issue |
 | `update_issue` | Update an existing issue |
 | `move_issue` | Move an issue to another project (copy with comments, attachments and links, link to original, close original) |
+| `link_issues` | Link two issues (link type, default Relates) |
+| `get_issue_links` | Get only the links of an issue (key, link type, direction) |
 | `get_comments` | Get comments on an issue |
 | `add_comment` | Add a comment to an issue |
 | `edit_comment` | Edit an existing comment on an issue |

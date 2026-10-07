@@ -185,7 +185,7 @@ async function linkWithOriginal(
   }
 }
 
-async function createLink(jira: JiraClient, typeName: string, fromKey: string, toKey: string): Promise<void> {
+export async function createLink(jira: JiraClient, typeName: string, fromKey: string, toKey: string): Promise<void> {
   await jira.post("/rest/api/2/issueLink", {
     type: { name: typeName },
     inwardIssue: { key: fromKey },

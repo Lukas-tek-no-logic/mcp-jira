@@ -37,11 +37,12 @@ export class JiraClient {
       throw new Error(`Jira API error (${response.status}): ${errorMessage}`);
     }
 
-    if (response.status === 204) {
+    const text = await response.text();
+    if (!text) {
       return undefined as T;
     }
 
-    return response.json() as Promise<T>;
+    return JSON.parse(text) as T;
   }
 
   async get<T>(path: string): Promise<T> {

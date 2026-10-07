@@ -11,6 +11,7 @@ import { registerBoardTools } from "./tools/boards.js";
 import { registerAttachmentTools } from "./tools/attachments.js";
 import { registerTempoTools } from "./tools/tempo.js";
 import { registerMoveTools } from "./tools/move.js";
+import { registerLinkTools } from "./tools/links.js";
 
 const baseUrl = process.env.JIRA_BASE_URL;
 const token = process.env.JIRA_TOKEN;
@@ -35,6 +36,7 @@ registerBoardTools(server, jira);
 registerAttachmentTools(server, jira);
 registerTempoTools(server, jira);
 registerMoveTools(server, jira);
+registerLinkTools(server, jira);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
