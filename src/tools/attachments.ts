@@ -13,13 +13,13 @@ const IMAGE_MIME_TYPES = new Set([
 export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
   server.tool(
     "list_attachments",
-    "List attachments on a Jira issue",
+    "List attachments on a Jira issue, oldest first",
     { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
     async ({ issueKey }) => {
       const issue = await jira.get<any>(
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=attachment`
       );
-      const attachments = (issue.fields.attachment || []).map((a: any) => ({
+      const attachments = sortByCreation(issue.fields.attachment || []).map((a: any) => ({
         id: a.id,
         filename: a.filename,
         mimeType: a.mimeType,
@@ -57,7 +57,7 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
         target = attachments.find((a: any) => a.filename === filename);
       } else {
         // Latest image attachment
-        target = [...attachments]
+        target = sortByCreation(attachments)
           .reverse()
           .find((a: any) => IMAGE_MIME_TYPES.has(a.mimeType));
       }
@@ -116,7 +116,7 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
     },
     async ({ issueKey, attachmentId, filename }) => {
       if (!attachmentId && !filename) {
-        return { content: [{ type: "text", text: "Provide attachmentId or filename." }] };
+        return { content: [{ type: "text", text: "Provide attachmentId or filename." }], isError: true };
       }
 
       const issue = await jira.get<any>(
@@ -145,8 +145,22 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
           reason = `Several attachments are named "${filename}". Use attachmentId.`;
         }
         const names = attachments.map((a: any) => `${a.filename} (id: ${a.id}, created: ${a.created})`);
-        return { content: [{ type: "text", text: `${reason} Available:\n${names.join("\n")}` }] };
+        return {
+          content: [{ type: "text", text: `${reason} Nothing was deleted. Available:\n${names.join("\n")}` }],
+          isError: true,
+        };
       }
     }
   );
+}
+
+function sortByCreation(attachments: any[]): any[] {
+  return [...attachments].sort((a: any, b: any) => {
+    const timeDifference = Date.parse(a.created) - Date.parse(b.created);
+    if (timeDifference !== 0 && !Number.isNaN(timeDifference)) {
+      return timeDifference;
+    } else {
+      return Number(a.id) - Number(b.id);
+    }
+  });
 }

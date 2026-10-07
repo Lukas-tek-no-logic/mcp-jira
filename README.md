@@ -134,13 +134,14 @@ Config location:
 | `move_issue` | Move an issue to another project (copy with comments, attachments and links, link to original, close original) |
 | `link_issues` | Link two issues (link type, default Relates) |
 | `get_issue_links` | Get only the links of an issue (key, link type, direction) |
+| `delete_issue_link` | Delete a link between two issues (by link ID) |
 | `get_comments` | Get comments on an issue |
 | `add_comment` | Add a comment to an issue |
 | `edit_comment` | Edit an existing comment on an issue |
 | `delete_comment` | Delete a comment from an issue |
 | `get_transitions` | Get available status transitions |
 | `transition_issue` | Change issue status |
-| `list_attachments` | List attachments on an issue |
+| `list_attachments` | List attachments on an issue, oldest first |
 | `get_attachment` | Download and display a specific image attachment |
 | `delete_attachment` | Delete an attachment from an issue (by ID or unique filename) |
 | `list_boards` | List Scrum/Kanban boards |
