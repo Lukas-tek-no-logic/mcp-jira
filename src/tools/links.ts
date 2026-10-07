@@ -14,8 +14,28 @@ export function registerLinkTools(server: McpServer, jira: JiraClient) {
       linkType: z.string().default("Relates").describe("Name of the issue link type (e.g. Relates, Blocks, Duplicate)"),
     },
     async ({ inwardIssue, outwardIssue, linkType }) => {
-      await createLink(jira, linkType, inwardIssue, outwardIssue);
-      return { content: [{ type: "text", text: `Linked ${inwardIssue} -[${linkType}]-> ${outwardIssue}` }] };
+      const existing = await findLink(jira, inwardIssue, outwardIssue, linkType);
+      if (existing) {
+        return {
+          content: [{
+            type: "text",
+            text: `Already linked ${inwardIssue} -[${linkType}]-> ${outwardIssue} (link id: ${existing.id}). No new link created.`,
+          }],
+        };
+      } else {
+        await createLink(jira, linkType, inwardIssue, outwardIssue);
+        return { content: [{ type: "text", text: `Linked ${inwardIssue} -[${linkType}]-> ${outwardIssue}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "delete_issue_link",
+    "Delete a link between two Jira issues, by link ID (from get_issue_links)",
+    { linkId: z.string().describe("The issue link ID (from get_issue_links)") },
+    async ({ linkId }) => {
+      await jira.delete<void>(`/rest/api/2/issueLink/${encodeURIComponent(linkId)}`);
+      return { content: [{ type: "text", text: `Deleted issue link ${linkId}` }] };
     }
   );
 
@@ -53,5 +73,16 @@ export function registerLinkTools(server: McpServer, jira: JiraClient) {
       });
       return { content: [{ type: "text", text: JSON.stringify(links, null, 2) }] };
     }
+  );
+}
+
+async function findLink(jira: JiraClient, inwardIssue: string, outwardIssue: string, linkType: string): Promise<any> {
+  const issue = await jira.get<any>(
+    `/rest/api/2/issue/${encodeURIComponent(inwardIssue)}?fields=issuelinks`
+  );
+  return (issue.fields.issuelinks || []).find(
+    (link: any) =>
+      link.type.name.toLowerCase() === linkType.toLowerCase() &&
+      link.outwardIssue?.key.toLowerCase() === outwardIssue.toLowerCase()
   );
 }

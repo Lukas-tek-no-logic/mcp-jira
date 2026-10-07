@@ -48,7 +48,7 @@ Each file exports a `register*Tools(server, jira)` function that registers relat
 | `attachments.ts` | `list_attachments`, `get_attachment`, `upload_attachment`, `delete_attachment` |
 | `tempo.ts` | `log_work`, `get_worklogs`, `delete_worklog` |
 | `move.ts` | `move_issue` (clone to another project, link, close original) |
-| `links.ts` | `link_issues`, `get_issue_links` |
+| `links.ts` | `link_issues`, `get_issue_links`, `delete_issue_link` |
 
 ### Patterns
 
