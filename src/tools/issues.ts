@@ -107,8 +107,10 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
       description: z.string().optional().describe("Issue description"),
       assignee: z.string().optional().describe("Assignee username"),
       priority: z.string().optional().describe("Priority name (e.g. High, Medium, Low)"),
+      labels: z.array(z.string()).optional().describe("Labels (e.g. [\"backend\", \"urgent\"])"),
+      dueDate: z.string().optional().describe("Due date in YYYY-MM-DD format"),
     },
-    async ({ projectKey, summary, issueType, description, assignee, priority }) => {
+    async ({ projectKey, summary, issueType, description, assignee, priority, labels, dueDate }) => {
       const fields: any = {
         project: { key: projectKey },
         summary,
@@ -117,6 +119,8 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
       if (description) fields.description = description;
       if (assignee) fields.assignee = { name: assignee };
       if (priority) fields.priority = { name: priority };
+      if (labels) fields.labels = labels;
+      if (dueDate) fields.duedate = dueDate;
 
       const result = await jira.post<any>("/rest/api/2/issue", { fields });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
@@ -132,13 +136,17 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
       description: z.string().optional().describe("New description"),
       assignee: z.string().optional().describe("New assignee username"),
       priority: z.string().optional().describe("New priority name"),
+      labels: z.array(z.string()).optional().describe("New labels. Replaces all current labels; an empty list removes them"),
+      dueDate: z.string().optional().describe("New due date in YYYY-MM-DD format"),
     },
-    async ({ issueKey, summary, description, assignee, priority }) => {
+    async ({ issueKey, summary, description, assignee, priority, labels, dueDate }) => {
       const fields: any = {};
       if (summary) fields.summary = summary;
       if (description) fields.description = description;
       if (assignee) fields.assignee = { name: assignee };
       if (priority) fields.priority = { name: priority };
+      if (labels) fields.labels = labels;
+      if (dueDate) fields.duedate = dueDate;
 
       await jira.put(`/rest/api/2/issue/${encodeURIComponent(issueKey)}`, { fields });
       return { content: [{ type: "text", text: `Issue ${issueKey} updated successfully.` }] };
