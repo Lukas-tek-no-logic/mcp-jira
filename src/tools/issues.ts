@@ -209,7 +209,7 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
       assignee: z.string().optional().describe("New assignee username"),
       priority: z.string().optional().describe("New priority name"),
       labels: z.array(z.string()).optional().describe("New labels. Replaces all current labels; an empty list removes them"),
-      dueDate: z.string().optional().describe("New due date in YYYY-MM-DD format"),
+      dueDate: z.string().optional().describe("New due date in YYYY-MM-DD format; an empty string clears it"),
     },
     async ({ issueKey, summary, description, assignee, priority, labels, dueDate }) => {
       const fields: any = {};
@@ -218,7 +218,11 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
       if (assignee) fields.assignee = { name: assignee };
       if (priority) fields.priority = { name: priority };
       if (labels) fields.labels = labels;
-      if (dueDate) fields.duedate = dueDate;
+      if (dueDate === "") {
+        fields.duedate = null;
+      } else if (dueDate) {
+        fields.duedate = dueDate;
+      }
 
       await jira.put(`/rest/api/2/issue/${encodeURIComponent(issueKey)}`, { fields });
       return { content: [{ type: "text", text: `Issue ${issueKey} updated successfully.` }] };

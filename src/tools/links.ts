@@ -4,6 +4,8 @@ import { JiraClient } from "../jira-client.js";
 import { jsonResult, linkShape, toLink } from "./shapes.js";
 import { createLink } from "./move.js";
 
+const SYMMETRIC_LINK_TYPES = ["relates", "related", "relationship"];
+
 export function registerLinkTools(server: McpServer, jira: JiraClient) {
   server.tool(
     "link_issues",
@@ -71,7 +73,10 @@ async function findLink(jira: JiraClient, inwardIssue: string, outwardIssue: str
 }
 
 function isSymmetric(linkType: any): boolean {
-  return linkType.inward?.toLowerCase() === linkType.outward?.toLowerCase();
+  return (
+    SYMMETRIC_LINK_TYPES.includes(linkType.name?.toLowerCase()) ||
+    linkType.inward?.toLowerCase() === linkType.outward?.toLowerCase()
+  );
 }
 
 function describeLink(issueKey: string, link: any): string {
