@@ -63,7 +63,7 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
       }
 
       if (!target) {
-        const names = attachments.map((a: any) => `${a.filename} (id: ${a.id}, ${a.mimeType})`);
+        const names = sortByCreation(attachments).map((a: any) => `${a.filename} (id: ${a.id}, ${a.mimeType})`);
         return {
           content: [{ type: "text", text: `Attachment not found. Available:\n${names.join("\n")}` }],
         };
@@ -101,7 +101,7 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
 
       const result = await jira.uploadAttachment(issueKey, filePath);
       const uploaded = Array.isArray(result) ? result : [result];
-      const names = uploaded.map((a: any) => a.filename).join(", ");
+      const names = uploaded.map((a: any) => `${a.filename} (id: ${a.id})`).join(", ");
       return { content: [{ type: "text", text: `Uploaded: ${names}` }] };
     }
   );
@@ -116,7 +116,7 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
     },
     async ({ issueKey, attachmentId, filename }) => {
       if (!attachmentId && !filename) {
-        return { content: [{ type: "text", text: "Provide attachmentId or filename." }], isError: true };
+        return { content: [{ type: "text", text: "Provide attachmentId or filename. Nothing was deleted." }], isError: true };
       }
 
       const issue = await jira.get<any>(
@@ -144,7 +144,7 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
         } else {
           reason = `Several attachments are named "${filename}". Use attachmentId.`;
         }
-        const names = attachments.map((a: any) => `${a.filename} (id: ${a.id}, created: ${a.created})`);
+        const names = sortByCreation(attachments).map((a: any) => `${a.filename} (id: ${a.id}, created: ${a.created})`);
         return {
           content: [{ type: "text", text: `${reason} Nothing was deleted. Available:\n${names.join("\n")}` }],
           isError: true,
