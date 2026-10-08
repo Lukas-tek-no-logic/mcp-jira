@@ -7,7 +7,8 @@ export function registerLinkTools(server: McpServer, jira: JiraClient) {
   server.tool(
     "link_issues",
     "Create a link between two Jira issues (same as More → Link in the Jira UI). " +
-      "The link reads: <inwardIssue> <outward description> <outwardIssue>, e.g. PROJ-2 blocks PROJ-1",
+      "The link reads: <inwardIssue> <outward description> <outwardIssue>, e.g. PROJ-2 blocks PROJ-1. " +
+      "For symmetric link types such as Relates, an existing link in either direction counts as already linked",
     {
       inwardIssue: z.string().describe("Key of the inward issue (e.g. PROJ-2)"),
       outwardIssue: z.string().describe("Key of the outward issue (e.g. PROJ-1)"),
@@ -19,7 +20,7 @@ export function registerLinkTools(server: McpServer, jira: JiraClient) {
         return {
           content: [{
             type: "text",
-            text: `Already linked ${inwardIssue} -[${linkType}]-> ${outwardIssue} (link id: ${existing.id}). No new link created.`,
+            text: `Already linked ${describeLink(inwardIssue, existing)} (link id: ${existing.id}). No new link created.`,
           }],
         };
       } else {
@@ -83,6 +84,19 @@ async function findLink(jira: JiraClient, inwardIssue: string, outwardIssue: str
   return (issue.fields.issuelinks || []).find(
     (link: any) =>
       link.type.name.toLowerCase() === linkType.toLowerCase() &&
-      link.outwardIssue?.key.toLowerCase() === outwardIssue.toLowerCase()
+      (link.outwardIssue?.key.toLowerCase() === outwardIssue.toLowerCase() ||
+        (isSymmetric(link.type) && link.inwardIssue?.key.toLowerCase() === outwardIssue.toLowerCase()))
   );
+}
+
+function isSymmetric(linkType: any): boolean {
+  return linkType.inward?.toLowerCase() === linkType.outward?.toLowerCase();
+}
+
+function describeLink(issueKey: string, link: any): string {
+  if (link.outwardIssue) {
+    return `${issueKey} -[${link.type.name}]-> ${link.outwardIssue.key}`;
+  } else {
+    return `${link.inwardIssue.key} -[${link.type.name}]-> ${issueKey}`;
+  }
 }
