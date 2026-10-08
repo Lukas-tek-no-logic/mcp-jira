@@ -16,7 +16,8 @@ export function registerMoveTools(server: McpServer, jira: JiraClient) {
       targetProjectKey: z.string().describe("Key of the target project (e.g. PROJB)"),
       issueType: z.string().optional().describe("Issue type in the target project (default: same type as the original)"),
       linkType: z.string().default("Relates").describe(
-        "Name of the issue link type between the original and the new issue (e.g. Relates, Duplicate, Cloners). " +
+        "Name of the issue link type between the original and the new issue. Use Relates (default) or Duplicate. " +
+          "Avoid Cloners: on some Jira servers its texts read the wrong way for a move. " +
           "The link reads: <original> <outward description> <new issue>, e.g. PROJA-1 duplicates PROJB-7"
       ),
       closeTransition: z.string().optional().describe(
