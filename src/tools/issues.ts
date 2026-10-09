@@ -176,7 +176,7 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
       projectKey: z.string().describe("The project key"),
       summary: z.string().describe("Issue summary/title"),
       issueType: z.string().optional().describe(
-        "Issue type (default: Task, or the first sub-task type of the project when parentKey is given)"
+        "Issue type (default: Task; when parentKey is given, Sub-task if the project has it, otherwise the first sub-task type of the project)"
       ),
       parentKey: z.string().optional().describe(
         "Key of the parent issue (e.g. PROJ-123). Creates a sub-task; the parent must be in projectKey"
@@ -268,11 +268,14 @@ async function defaultIssueType(jira: JiraClient, projectKey: string, parentKey:
     return "Task";
   } else {
     const project = await jira.get<any>(`/rest/api/2/project/${encodeURIComponent(projectKey)}`);
-    const subtaskType = (project.issueTypes || []).find((t: any) => t.subtask);
-    if (!subtaskType) {
+    const subtaskTypes = (project.issueTypes || []).filter((t: any) => t.subtask);
+    const standardSubtaskType = subtaskTypes.find((t: any) => t.name === "Sub-task" || String(t.id) === "5");
+    if (subtaskTypes.length === 0) {
       throw new Error(`Project ${projectKey} has no sub-task issue type.`);
+    } else if (standardSubtaskType) {
+      return standardSubtaskType.name;
     } else {
-      return subtaskType.name;
+      return subtaskTypes[0].name;
     }
   }
 }
