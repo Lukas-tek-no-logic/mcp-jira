@@ -36,14 +36,34 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
 
   server.tool(
     "get_issue",
-    "Get full details of a Jira issue",
-    { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
-    async ({ issueKey }) => {
+    "Get full details of a Jira issue. Image attachments are listed, not downloaded; " +
+      "fetch one with get_attachment (attachmentId), or set includeImages to download them here",
+    {
+      issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
+      includeImages: z.boolean().default(false).describe("Download image attachments into the result (default false)"),
+      maxImages: z.number().int().min(1).max(10).default(5).describe("With includeImages: how many images to download, newest first (default 5, max 10)"),
+    },
+    async ({ issueKey, includeImages, maxImages }) => {
       const issue = await jira.get<any>(`/rest/api/2/issue/${encodeURIComponent(issueKey)}`);
       const content: any[] = [{ type: "text", text: JSON.stringify(issue, null, 2) }];
 
       const attachments: any[] = issue.fields?.attachment || [];
-      const images = attachments.filter((a: any) => IMAGE_MIME_TYPES.has(a.mimeType));
+      // Newest first, so a capped download keeps the most recent screenshots
+      const allImages = attachments
+        .filter((a: any) => IMAGE_MIME_TYPES.has(a.mimeType))
+        .sort((a: any, b: any) => new Date(b.created).getTime() - new Date(a.created).getTime());
+      const images = includeImages ? allImages.slice(0, maxImages) : [];
+      const skipped = allImages.slice(images.length);
+
+      if (skipped.length) {
+        const list = skipped.map((a: any) =>
+          `- ${a.filename} (id: ${a.id}, ${a.mimeType}, ${Math.round(a.size / 1024)} KB, created: ${a.created})`);
+        content.push({
+          type: "text",
+          text: `\n--- ${skipped.length} image attachment(s) not downloaded. To view the ones you need, ` +
+            `call get_attachment with attachmentIds (max 10 per call):\n${list.join("\n")}`,
+        });
+      }
 
       for (const img of images) {
         try {

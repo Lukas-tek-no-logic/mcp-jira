@@ -128,7 +128,7 @@ Config location:
 | `get_project` | Get project details |
 | `search_issues` | Search issues using JQL |
 | `find_issues` | Full-text search across issues (summary, description, comments) |
-| `get_issue` | Get full issue details + auto-downloads image attachments |
+| `get_issue` | Get full issue details; image attachments are listed by ID (`includeImages: true` downloads up to `maxImages`, default 5) |
 | `create_issue` | Create a new issue |
 | `update_issue` | Update an existing issue |
 | `move_issue` | Move an issue to another project (copy with comments, attachments and links, link to original, close original) |
@@ -142,7 +142,7 @@ Config location:
 | `get_transitions` | Get available status transitions |
 | `transition_issue` | Change issue status |
 | `list_attachments` | List attachments on an issue, oldest first |
-| `get_attachment` | Download and display a specific image attachment |
+| `get_attachment` | Download and display chosen image attachments (`attachmentId` or `attachmentIds`, max 10, IDs from `get_issue` / `list_attachments`) |
 | `delete_attachment` | Delete an attachment from an issue (by ID or unique filename) |
 | `list_boards` | List Scrum/Kanban boards |
 | `get_sprints` | Get sprints for a board |

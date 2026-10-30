@@ -54,7 +54,7 @@ Each file exports a `register*Tools(server, jira)` function that registers relat
 
 - Tool inputs are validated with Zod schemas at the MCP boundary.
 - All tools return `{ content: [{ type: "text"|"image", ... }] }`.
-- `get_issue` auto-downloads image attachments as base64.
+- `get_issue` lists image attachments by ID without downloading them; `includeImages: true` downloads up to `maxImages` (default 5, newest first). Images are opt-in because one issue with dozens of screenshots overflows the per-request image limit of the model (GLM: 50).
 - `get_attachment` supports retrieval by ID, filename, or "latest image" default.
 - Tempo module parses natural time formats ("1h 30m") and resolves issue IDs to keys.
 

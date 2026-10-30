@@ -10,6 +10,9 @@ const IMAGE_MIME_TYPES = new Set([
   "image/webp",
 ]);
 
+// Keeps one call well under the per-request image limit of vision models (GLM: 50)
+const MAX_IMAGES_PER_CALL = 10;
+
 export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
   server.tool(
     "list_attachments",
@@ -33,13 +36,15 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
 
   server.tool(
     "get_attachment",
-    "Download and display an attachment image from a Jira issue",
+    "Download and display image attachments from a Jira issue. Pick them by ID from the list " +
+      "returned by get_issue or list_attachments; only the chosen images are downloaded",
     {
       issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
       attachmentId: z.string().optional().describe("Specific attachment ID. If not provided, returns the latest image attachment."),
+      attachmentIds: z.array(z.string()).optional().describe("Several attachment IDs to download in one call (max 10)"),
       filename: z.string().optional().describe("Attachment filename to find. If not provided, returns the latest image attachment."),
     },
-    async ({ issueKey, attachmentId, filename }) => {
+    async ({ issueKey, attachmentId, attachmentIds, filename }) => {
       const issue = await jira.get<any>(
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=attachment`
       );
@@ -47,6 +52,35 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
 
       if (attachments.length === 0) {
         return { content: [{ type: "text", text: "No attachments found on this issue." }] };
+      }
+
+      if (attachmentIds?.length) {
+        if (attachmentIds.length > MAX_IMAGES_PER_CALL) {
+          return {
+            content: [{ type: "text", text: `At most ${MAX_IMAGES_PER_CALL} attachments per call. Nothing was downloaded.` }],
+            isError: true,
+          };
+        }
+        const content: any[] = [];
+        for (const id of attachmentIds) {
+          const a = attachments.find((x: any) => x.id === id);
+          if (!a) {
+            content.push({ type: "text", text: `Attachment id ${id}: not found on ${issueKey}` });
+          } else if (!IMAGE_MIME_TYPES.has(a.mimeType)) {
+            content.push({ type: "text", text: `Attachment "${a.filename}" is ${a.mimeType}, not an image. Cannot display.` });
+          } else {
+            try {
+              const buffer = await jira.getBuffer(a.content);
+              content.push(
+                { type: "text", text: `Attachment: ${a.filename} (id: ${a.id}, ${a.mimeType})` },
+                { type: "image", data: buffer.toString("base64"), mimeType: a.mimeType },
+              );
+            } catch {
+              content.push({ type: "text", text: `Failed to download: ${a.filename} (id: ${a.id})` });
+            }
+          }
+        }
+        return { content };
       }
 
       let target: any;
