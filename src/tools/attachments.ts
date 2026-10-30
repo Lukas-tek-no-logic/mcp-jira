@@ -2,122 +2,108 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "fs";
 import { JiraClient } from "../jira-client.js";
-
-const IMAGE_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-]);
+import { IMAGE_MIME_TYPES, attachmentShape, jsonResult, sortByCreation, toAttachment } from "./shapes.js";
 
 // Keeps one call well under the per-request image limit of vision models (GLM: 50)
 const MAX_IMAGES_PER_CALL = 10;
 
 export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
-  server.tool(
+  server.registerTool(
     "list_attachments",
-    "List attachments on a Jira issue, oldest first",
-    { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+    {
+      description: "List attachments on a Jira issue, oldest first",
+      inputSchema: { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+      outputSchema: { issueKey: z.string(), attachments: z.array(attachmentShape) },
+    },
     async ({ issueKey }) => {
       const issue = await jira.get<any>(
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=attachment`
       );
-      const attachments = sortByCreation(issue.fields.attachment || []).map((a: any) => ({
-        id: a.id,
-        filename: a.filename,
-        mimeType: a.mimeType,
-        size: a.size,
-        created: a.created,
-        author: a.author?.displayName,
-      }));
-      return { content: [{ type: "text", text: JSON.stringify(attachments, null, 2) }] };
+      const attachments = sortByCreation(issue.fields.attachment || []).map(toAttachment);
+      return jsonResult({ issueKey, attachments });
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_attachment",
-    "Download and display image attachments from a Jira issue. Pick them by ID from the list " +
-      "returned by get_issue or list_attachments; only the chosen images are downloaded",
     {
-      issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
-      attachmentId: z.string().optional().describe("Specific attachment ID. If not provided, returns the latest image attachment."),
-      attachmentIds: z.array(z.string()).optional().describe("Several attachment IDs to download in one call (max 10)"),
-      filename: z.string().optional().describe("Attachment filename to find. If not provided, returns the latest image attachment."),
+      description:
+        "Download and display image attachments from a Jira issue. Pick them by ID from the attachment list " +
+        "returned by get_issue or list_attachments; only the chosen images are downloaded",
+      inputSchema: {
+        issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
+        attachmentId: z.string().optional().describe("Specific attachment ID. If no ID or filename is given, returns the latest image attachment."),
+        attachmentIds: z.array(z.string()).optional().describe(`Several attachment IDs to download in one call (max ${MAX_IMAGES_PER_CALL})`),
+        filename: z.string().optional().describe("Attachment filename to find. If no ID or filename is given, returns the latest image attachment."),
+      },
+      outputSchema: {
+        issueKey: z.string(),
+        results: z.array(z.object({
+          requested: z.string().describe("The ID or filename asked for, or \"latest image\""),
+          id: z.string().optional(),
+          filename: z.string().optional(),
+          mimeType: z.string().optional(),
+          downloaded: z.boolean().describe("The image is included in this result"),
+          error: z.string().optional(),
+        })),
+        available: z.array(attachmentShape).optional().describe("All attachments on the issue, when a requested one was not found"),
+      },
     },
     async ({ issueKey, attachmentId, attachmentIds, filename }) => {
+      if (attachmentIds && attachmentIds.length > MAX_IMAGES_PER_CALL) {
+        return {
+          content: [{ type: "text", text: `At most ${MAX_IMAGES_PER_CALL} attachments per call. Nothing was downloaded.` }],
+          isError: true,
+        };
+      }
+
       const issue = await jira.get<any>(
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=attachment`
       );
-      const attachments: any[] = issue.fields.attachment || [];
+      const attachments: any[] = sortByCreation(issue.fields.attachment || []);
 
-      if (attachments.length === 0) {
-        return { content: [{ type: "text", text: "No attachments found on this issue." }] };
-      }
-
+      let requests: Array<{ requested: string; target: any }>;
       if (attachmentIds?.length) {
-        if (attachmentIds.length > MAX_IMAGES_PER_CALL) {
-          return {
-            content: [{ type: "text", text: `At most ${MAX_IMAGES_PER_CALL} attachments per call. Nothing was downloaded.` }],
-            isError: true,
-          };
-        }
-        const content: any[] = [];
-        for (const id of attachmentIds) {
-          const a = attachments.find((x: any) => x.id === id);
-          if (!a) {
-            content.push({ type: "text", text: `Attachment id ${id}: not found on ${issueKey}` });
-          } else if (!IMAGE_MIME_TYPES.has(a.mimeType)) {
-            content.push({ type: "text", text: `Attachment "${a.filename}" is ${a.mimeType}, not an image. Cannot display.` });
-          } else {
-            try {
-              const buffer = await jira.getBuffer(a.content);
-              content.push(
-                { type: "text", text: `Attachment: ${a.filename} (id: ${a.id}, ${a.mimeType})` },
-                { type: "image", data: buffer.toString("base64"), mimeType: a.mimeType },
-              );
-            } catch {
-              content.push({ type: "text", text: `Failed to download: ${a.filename} (id: ${a.id})` });
-            }
-          }
-        }
-        return { content };
-      }
-
-      let target: any;
-
-      if (attachmentId) {
-        target = attachments.find((a: any) => a.id === attachmentId);
+        requests = attachmentIds.map((id) => ({ requested: id, target: attachments.find((a: any) => a.id === id) }));
+      } else if (attachmentId) {
+        requests = [{ requested: attachmentId, target: attachments.find((a: any) => a.id === attachmentId) }];
       } else if (filename) {
-        target = attachments.find((a: any) => a.filename === filename);
+        requests = [{ requested: filename, target: attachments.find((a: any) => a.filename === filename) }];
       } else {
-        // Latest image attachment
-        target = sortByCreation(attachments)
-          .reverse()
-          .find((a: any) => IMAGE_MIME_TYPES.has(a.mimeType));
+        const latest = [...attachments].reverse().find((a: any) => IMAGE_MIME_TYPES.has(a.mimeType));
+        requests = [{ requested: "latest image", target: latest }];
       }
 
-      if (!target) {
-        const names = sortByCreation(attachments).map((a: any) => `${a.filename} (id: ${a.id}, ${a.mimeType})`);
-        return {
-          content: [{ type: "text", text: `Attachment not found. Available:\n${names.join("\n")}` }],
-        };
+      const results: any[] = [];
+      const images: any[] = [];
+      for (const { requested, target } of requests) {
+        if (!target) {
+          results.push({ requested, downloaded: false, error: "Not found on this issue" });
+          continue;
+        }
+        const result = { requested, id: target.id, filename: target.filename, mimeType: target.mimeType };
+        if (!IMAGE_MIME_TYPES.has(target.mimeType)) {
+          results.push({ ...result, downloaded: false, error: "Not an image, cannot display" });
+          continue;
+        }
+        try {
+          const buffer = await jira.getBuffer(target.content);
+          images.push(
+            { type: "text", text: `Attachment: ${target.filename} (id: ${target.id}, ${target.mimeType})` },
+            { type: "image", data: buffer.toString("base64"), mimeType: target.mimeType },
+          );
+          results.push({ ...result, downloaded: true });
+        } catch {
+          results.push({ ...result, downloaded: false, error: "Download failed" });
+        }
       }
 
-      if (!IMAGE_MIME_TYPES.has(target.mimeType)) {
-        return {
-          content: [{ type: "text", text: `Attachment "${target.filename}" is ${target.mimeType}, not an image. Cannot display.` }],
-        };
-      }
-
-      const imageBuffer = await jira.getBuffer(target.content);
-      const base64 = imageBuffer.toString("base64");
-
-      return {
-        content: [
-          { type: "text", text: `Attachment: ${target.filename} (${target.mimeType})` },
-          { type: "image", data: base64, mimeType: target.mimeType },
-        ],
-      };
+      const missing = results.some((r) => r.error === "Not found on this issue");
+      return jsonResult({
+        issueKey,
+        results,
+        available: missing ? attachments.map(toAttachment) : undefined,
+      }, images);
     }
   );
 
@@ -186,15 +172,4 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
       }
     }
   );
-}
-
-function sortByCreation(attachments: any[]): any[] {
-  return [...attachments].sort((a: any, b: any) => {
-    const timeDifference = Date.parse(a.created) - Date.parse(b.created);
-    if (timeDifference !== 0 && !Number.isNaN(timeDifference)) {
-      return timeDifference;
-    } else {
-      return Number(a.id) - Number(b.id);
-    }
-  });
 }

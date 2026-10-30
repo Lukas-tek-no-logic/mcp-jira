@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
+import { jsonResult } from "./shapes.js";
 
 export function registerTempoTools(server: McpServer, jira: JiraClient) {
   // Tempo 4 requires an explicit worker key; resolve the token owner once and cache it.
@@ -53,16 +54,30 @@ export function registerTempoTools(server: McpServer, jira: JiraClient) {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_worklogs",
-    "Get Tempo worklogs for a date range (defaults to the token owner's worklogs; set allWorkers=true for everyone)",
     {
-      from: z.string().describe("Start date (YYYY-MM-DD)"),
-      to: z.string().describe("End date (YYYY-MM-DD)"),
-      worker: z.string().optional().describe("Username to filter by (defaults to token owner)"),
-      allWorkers: z.boolean().optional().describe("Return worklogs of all users (can be very large)"),
-      projectKey: z.string().optional().describe("Project key to filter by"),
-      issueKey: z.string().optional().describe("Issue key to filter by"),
+      description: "Get Tempo worklogs for a date range (defaults to the token owner's worklogs; set allWorkers=true for everyone)",
+      inputSchema: {
+        from: z.string().describe("Start date (YYYY-MM-DD)"),
+        to: z.string().describe("End date (YYYY-MM-DD)"),
+        worker: z.string().optional().describe("Username to filter by (defaults to token owner)"),
+        allWorkers: z.boolean().optional().describe("Return worklogs of all users (can be very large)"),
+        projectKey: z.string().optional().describe("Project key to filter by"),
+        issueKey: z.string().optional().describe("Issue key to filter by"),
+      },
+      outputSchema: {
+        from: z.string(),
+        to: z.string(),
+        worklogs: z.array(z.object({
+          id: z.number().describe("Tempo worklog ID, for delete_worklog"),
+          issue: z.string().describe("Issue key"),
+          date: z.string(),
+          timeSpent: z.string().describe("e.g. \"1h 30m\""),
+          worker: z.string(),
+          comment: z.string().optional(),
+        })),
+      },
     },
     async ({ from, to, worker, allWorkers, projectKey, issueKey }) => {
       const body: any = { from, to };
@@ -90,13 +105,13 @@ export function registerTempoTools(server: McpServer, jira: JiraClient) {
 
       const worklogs = results.map((w: any) => ({
         id: w.tempoWorklogId,
-        issue: idToKey[String(w.originTaskId)] || w.originTaskId,
+        issue: idToKey[String(w.originTaskId)] || String(w.originTaskId),
         date: w.started,
         timeSpent: formatSeconds(w.timeSpentSeconds),
         worker: w.worker,
-        comment: w.comment,
+        comment: w.comment ?? undefined,
       }));
-      return { content: [{ type: "text", text: JSON.stringify(worklogs, null, 2) }] };
+      return jsonResult({ from, to, worklogs });
     }
   );
 

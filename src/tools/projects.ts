@@ -1,12 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
+import { jsonResult } from "./shapes.js";
 
 export function registerProjectTools(server: McpServer, jira: JiraClient) {
-  server.tool(
+  server.registerTool(
     "list_projects",
-    "List all Jira projects",
-    {},
+    {
+      description: "List all Jira projects",
+      outputSchema: {
+        projects: z.array(z.object({ key: z.string(), name: z.string(), lead: z.string().optional() })),
+      },
+    },
     async () => {
       const projects = await jira.get<any[]>("/rest/api/2/project");
       const result = projects.map((p) => ({
@@ -14,7 +19,7 @@ export function registerProjectTools(server: McpServer, jira: JiraClient) {
         name: p.name,
         lead: p.lead?.displayName,
       }));
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      return jsonResult({ projects: result });
     }
   );
 

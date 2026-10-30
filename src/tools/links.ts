@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
+import { jsonResult, linkShape, toLink } from "./shapes.js";
 import { createLink } from "./move.js";
 
 export function registerLinkTools(server: McpServer, jira: JiraClient) {
@@ -40,39 +41,19 @@ export function registerLinkTools(server: McpServer, jira: JiraClient) {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_issue_links",
-    "Get only the issue links of a Jira issue: linked issue key, link type and direction. " +
-      "Much smaller than get_issue",
-    { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+    {
+      description: "Get only the issue links of a Jira issue: linked issue key, link type and direction. " +
+        "Much smaller than get_issue",
+      inputSchema: { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+      outputSchema: { issueKey: z.string(), links: z.array(linkShape) },
+    },
     async ({ issueKey }) => {
       const issue = await jira.get<any>(
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=issuelinks`
       );
-      const links = (issue.fields.issuelinks || []).map((link: any) => {
-        if (link.outwardIssue) {
-          return {
-            id: link.id,
-            type: link.type.name,
-            direction: "outward",
-            relation: link.type.outward,
-            key: link.outwardIssue.key,
-            summary: link.outwardIssue.fields?.summary,
-            status: link.outwardIssue.fields?.status?.name,
-          };
-        } else {
-          return {
-            id: link.id,
-            type: link.type.name,
-            direction: "inward",
-            relation: link.type.inward,
-            key: link.inwardIssue.key,
-            summary: link.inwardIssue.fields?.summary,
-            status: link.inwardIssue.fields?.status?.name,
-          };
-        }
-      });
-      return { content: [{ type: "text", text: JSON.stringify(links, null, 2) }] };
+      return jsonResult({ issueKey, links: (issue.fields.issuelinks || []).map(toLink) });
     }
   );
 }

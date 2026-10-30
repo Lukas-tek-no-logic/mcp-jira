@@ -1,12 +1,23 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
+import { jsonResult } from "./shapes.js";
 
 export function registerTransitionTools(server: McpServer, jira: JiraClient) {
-  server.tool(
+  server.registerTool(
     "get_transitions",
-    "Get available transitions for a Jira issue",
-    { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+    {
+      description: "Get available transitions for a Jira issue",
+      inputSchema: { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+      outputSchema: {
+        issueKey: z.string(),
+        transitions: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          to: z.string().optional().describe("Status after the transition"),
+        })),
+      },
+    },
     async ({ issueKey }) => {
       const data = await jira.get<any>(
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}/transitions`
@@ -16,7 +27,7 @@ export function registerTransitionTools(server: McpServer, jira: JiraClient) {
         name: t.name,
         to: t.to?.name,
       }));
-      return { content: [{ type: "text", text: JSON.stringify(transitions, null, 2) }] };
+      return jsonResult({ issueKey, transitions });
     }
   );
 

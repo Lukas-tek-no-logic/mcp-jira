@@ -1,21 +1,44 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
+import {
+  attachmentShape,
+  commentShape,
+  issueSummaryShape,
+  jsonResult,
+  linkShape,
+  sortByCreation,
+  toAttachment,
+  toComment,
+  toIssueSummary,
+  toLink,
+} from "./shapes.js";
 
-const IMAGE_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
+// Fields get_issue returns at the top level; everything else goes to otherFields
+const MAIN_FIELDS = new Set([
+  "summary", "issuetype", "status", "resolution", "priority", "assignee", "reporter",
+  "created", "updated", "resolutiondate", "duedate", "labels", "description",
+  "comment", "attachment", "issuelinks",
 ]);
 
+// Keys that only add noise for a model reading the issue
+const NOISE_KEYS = new Set(["avatarUrls", "iconUrl", "self"]);
+
+const searchOutput = {
+  total: z.number().describe("Number of matching issues in Jira; can be larger than issues.length"),
+  issues: z.array(issueSummaryShape),
+};
+
 export function registerIssueTools(server: McpServer, jira: JiraClient) {
-  server.tool(
+  server.registerTool(
     "search_issues",
-    "Search Jira issues using JQL",
     {
-      jql: z.string().describe("JQL query string"),
-      maxResults: z.number().default(20).describe("Maximum number of results (default 20)"),
+      description: "Search Jira issues using JQL",
+      inputSchema: {
+        jql: z.string().describe("JQL query string"),
+        maxResults: z.number().default(20).describe("Maximum number of results (default 20)"),
+      },
+      outputSchema: searchOutput,
     },
     async ({ jql, maxResults }) => {
       const params = new URLSearchParams({
@@ -23,71 +46,115 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
         maxResults: String(maxResults),
       });
       const data = await jira.get<any>(`/rest/api/2/search?${params}`);
-      const issues = data.issues.map((i: any) => ({
-        key: i.key,
-        summary: i.fields.summary,
-        status: i.fields.status?.name,
-        assignee: i.fields.assignee?.displayName,
-        priority: i.fields.priority?.name,
-      }));
-      return { content: [{ type: "text", text: JSON.stringify(issues, null, 2) }] };
+      return jsonResult({ total: data.total, issues: data.issues.map(toIssueSummary) });
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_issue",
-    "Get full details of a Jira issue. Image attachments are listed, not downloaded; " +
-      "fetch one with get_attachment (attachmentId), or set includeImages to download them here",
     {
-      issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
-      includeImages: z.boolean().default(false).describe("Download image attachments into the result (default false)"),
-      maxImages: z.number().int().min(1).max(10).default(5).describe("With includeImages: how many images to download, newest first (default 5, max 10)"),
+      description:
+        "Get a Jira issue: main fields, description, all comments, links and the attachment list. " +
+        "Image attachments are not downloaded unless includeImages is set; to view chosen ones, " +
+        "call get_attachment with attachmentIds",
+      inputSchema: {
+        issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
+        includeImages: z.boolean().default(false).describe("Download image attachments into the result (default false)"),
+        maxImages: z.number().int().min(1).max(10).default(5).describe("With includeImages: how many images to download, newest first (default 5, max 10)"),
+      },
+      outputSchema: {
+        key: z.string(),
+        summary: z.string(),
+        type: z.string().optional(),
+        status: z.string().optional(),
+        resolution: z.string().optional(),
+        priority: z.string().optional(),
+        assignee: z.string().optional(),
+        reporter: z.string().optional(),
+        created: z.string().optional(),
+        updated: z.string().optional(),
+        resolved: z.string().optional(),
+        dueDate: z.string().optional(),
+        labels: z.array(z.string()),
+        description: z.string().describe("Issue description in Jira wiki markup; empty when the issue has none"),
+        comments: z.object({
+          total: z.number().describe("Number of comments on the issue"),
+          items: z.array(commentShape),
+        }),
+        links: z.array(linkShape),
+        attachments: z.array(attachmentShape.extend({
+          downloaded: z.boolean().describe("The image is included in this result"),
+        })).describe("Oldest first"),
+        note: z.string().optional().describe("Present when image attachments were left out"),
+        otherFields: z.record(z.string(), z.unknown()).describe(
+          "All other non-empty Jira fields by name; custom fields as \"Field name [customfield_N]\""),
+      },
     },
     async ({ issueKey, includeImages, maxImages }) => {
-      const issue = await jira.get<any>(`/rest/api/2/issue/${encodeURIComponent(issueKey)}`);
-      const content: any[] = [{ type: "text", text: JSON.stringify(issue, null, 2) }];
+      const issue = await jira.get<any>(`/rest/api/2/issue/${encodeURIComponent(issueKey)}?expand=names`);
+      const f = issue.fields ?? {};
 
-      const attachments: any[] = issue.fields?.attachment || [];
+      const attachments: any[] = sortByCreation(f.attachment || []);
       // Newest first, so a capped download keeps the most recent screenshots
-      const allImages = attachments
-        .filter((a: any) => IMAGE_MIME_TYPES.has(a.mimeType))
-        .sort((a: any, b: any) => new Date(b.created).getTime() - new Date(a.created).getTime());
-      const images = includeImages ? allImages.slice(0, maxImages) : [];
-      const skipped = allImages.slice(images.length);
+      const images = includeImages
+        ? attachments.filter((a: any) => toAttachment(a).isImage).reverse().slice(0, maxImages)
+        : [];
 
-      if (skipped.length) {
-        const list = skipped.map((a: any) =>
-          `- ${a.filename} (id: ${a.id}, ${a.mimeType}, ${Math.round(a.size / 1024)} KB, created: ${a.created})`);
-        content.push({
-          type: "text",
-          text: `\n--- ${skipped.length} image attachment(s) not downloaded. To view the ones you need, ` +
-            `call get_attachment with attachmentIds (max 10 per call):\n${list.join("\n")}`,
-        });
-      }
-
+      const extra: any[] = [];
+      const downloaded = new Set<string>();
       for (const img of images) {
         try {
           const buffer = await jira.getBuffer(img.content);
-          content.push(
-            { type: "text", text: `\n--- Attachment: ${img.filename} ---` },
+          extra.push(
+            { type: "text", text: `Attachment: ${img.filename} (id: ${img.id})` },
             { type: "image", data: buffer.toString("base64"), mimeType: img.mimeType },
           );
+          downloaded.add(img.id);
         } catch {
-          content.push({ type: "text", text: `\n--- Failed to download: ${img.filename} ---` });
+          // Reported through downloaded: false
         }
       }
 
-      return { content };
+      const attachmentList = attachments.map((a: any) => ({ ...toAttachment(a), downloaded: downloaded.has(a.id) }));
+      const skipped = attachmentList.filter((a) => a.isImage && !a.downloaded).length;
+      const comments = (f.comment?.comments || []).map(toComment);
+
+      return jsonResult({
+        key: issue.key,
+        summary: f.summary ?? "",
+        type: f.issuetype?.name,
+        status: f.status?.name,
+        resolution: f.resolution?.name,
+        priority: f.priority?.name,
+        assignee: f.assignee?.displayName,
+        reporter: f.reporter?.displayName,
+        created: f.created ?? undefined,
+        updated: f.updated ?? undefined,
+        resolved: f.resolutiondate ?? undefined,
+        dueDate: f.duedate ?? undefined,
+        labels: f.labels || [],
+        description: f.description ?? "",
+        comments: { total: f.comment?.total ?? comments.length, items: comments },
+        links: (f.issuelinks || []).map(toLink),
+        attachments: attachmentList,
+        note: skipped
+          ? `${skipped} image attachment(s) not downloaded. To view chosen ones, call get_attachment with attachmentIds (max 10 per call).`
+          : undefined,
+        otherFields: otherFields(f, issue.names ?? {}),
+      }, extra);
     }
   );
 
-  server.tool(
+  server.registerTool(
     "find_issues",
-    "Full-text search across Jira issues (searches summary, description, comments, attachments). Simpler than JQL - just type what you're looking for.",
     {
-      query: z.string().describe("Text to search for (e.g. 'login timeout', 'NullPointerException')"),
-      projectKey: z.string().optional().describe("Limit search to a specific project (e.g. MYAPP)"),
-      maxResults: z.number().default(20).describe("Maximum number of results (default 20)"),
+      description: "Full-text search across Jira issues (searches summary, description, comments, attachments). Simpler than JQL - just type what you're looking for.",
+      inputSchema: {
+        query: z.string().describe("Text to search for (e.g. 'login timeout', 'NullPointerException')"),
+        projectKey: z.string().optional().describe("Limit search to a specific project (e.g. MYAPP)"),
+        maxResults: z.number().default(20).describe("Maximum number of results (default 20)"),
+      },
+      outputSchema: searchOutput,
     },
     async ({ query, projectKey, maxResults }) => {
       let jql = `text ~ "${query.replace(/"/g, '\\"')}"`;
@@ -98,22 +165,7 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
         maxResults: String(maxResults),
       });
       const data = await jira.get<any>(`/rest/api/2/search?${params}`);
-      const issues = data.issues.map((i: any) => ({
-        key: i.key,
-        summary: i.fields.summary,
-        status: i.fields.status?.name,
-        assignee: i.fields.assignee?.displayName,
-        priority: i.fields.priority?.name,
-        updated: i.fields.updated,
-      }));
-      return {
-        content: [{
-          type: "text",
-          text: issues.length
-            ? JSON.stringify(issues, null, 2)
-            : `No issues found for "${query}"`,
-        }],
-      };
+      return jsonResult({ total: data.total, issues: data.issues.map(toIssueSummary) });
     }
   );
 
@@ -172,4 +224,31 @@ export function registerIssueTools(server: McpServer, jira: JiraClient) {
       return { content: [{ type: "text", text: `Issue ${issueKey} updated successfully.` }] };
     }
   );
+}
+
+function otherFields(fields: Record<string, any>, names: Record<string, string>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [id, value] of Object.entries(fields)) {
+    if (MAIN_FIELDS.has(id)) continue;
+    const cleaned = withoutNoise(value);
+    if (isEmpty(cleaned)) continue;
+    const name = id.startsWith("customfield_") && names[id] ? `${names[id]} [${id}]` : id;
+    result[name] = cleaned;
+  }
+  return result;
+}
+
+function withoutNoise(value: any): any {
+  if (Array.isArray(value)) return value.map(withoutNoise);
+  if (value === null || typeof value !== "object") return value;
+  const result: Record<string, any> = {};
+  for (const [key, inner] of Object.entries(value)) {
+    if (!NOISE_KEYS.has(key)) result[key] = withoutNoise(inner);
+  }
+  return result;
+}
+
+function isEmpty(value: any): boolean {
+  return value === null || value === undefined || value === "" ||
+    (Array.isArray(value) && value.length === 0);
 }

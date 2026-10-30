@@ -1,24 +1,26 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
+import { commentShape, jsonResult, toComment } from "./shapes.js";
 
 export function registerCommentTools(server: McpServer, jira: JiraClient) {
-  server.tool(
+  server.registerTool(
     "get_comments",
-    "Get comments on a Jira issue",
-    { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+    {
+      description: "Get comments on a Jira issue, oldest first",
+      inputSchema: { issueKey: z.string().describe("The issue key (e.g. PROJ-123)") },
+      outputSchema: {
+        issueKey: z.string(),
+        total: z.number().describe("Number of comments on the issue"),
+        comments: z.array(commentShape),
+      },
+    },
     async ({ issueKey }) => {
       const data = await jira.get<any>(
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}/comment`
       );
-      const comments = data.comments.map((c: any) => ({
-        id: c.id,
-        author: c.author?.displayName,
-        body: c.body,
-        created: c.created,
-        updated: c.updated,
-      }));
-      return { content: [{ type: "text", text: JSON.stringify(comments, null, 2) }] };
+      const comments = data.comments.map(toComment);
+      return jsonResult({ issueKey, total: data.total ?? comments.length, comments });
     }
   );
 
