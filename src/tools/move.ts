@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
+import { createLink } from "./links.js";
 
 const COPIED_FIELDS = ["description", "priority", "assignee", "reporter", "labels", "duedate", "environment"];
 const NOT_COPIED_FIELDS = ["components", "fixVersions", "versions"];
@@ -184,14 +185,6 @@ async function linkWithOriginal(
     warnings.push(`Link "${linkType}" between ${originalKey} and ${newKey} was not created: ${e.message}`);
     return null;
   }
-}
-
-export async function createLink(jira: JiraClient, typeName: string, fromKey: string, toKey: string): Promise<void> {
-  await jira.post("/rest/api/2/issueLink", {
-    type: { name: typeName },
-    inwardIssue: { key: fromKey },
-    outwardIssue: { key: toKey },
-  });
 }
 
 async function closeOriginal(

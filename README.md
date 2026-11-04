@@ -134,6 +134,7 @@ Read tools (`get_*`, `list_*`, `search_issues`, `find_issues`) return typed resu
 | `create_issue` | Create a new issue |
 | `update_issue` | Update an existing issue |
 | `move_issue` | Move an issue to another project (copy with comments, attachments and links, link to original, close original) |
+| `clone_issue` | Clone an issue in the same or another project (fields incl. custom ones on the create screen, attachments, links; comments and sub-tasks on request), linked with Cloners |
 | `link_issues` | Link two issues (link type, default Relates) |
 | `get_issue_links` | Get only the links of an issue (key, link type, direction) |
 | `delete_issue_link` | Delete a link between two issues (by link ID) |

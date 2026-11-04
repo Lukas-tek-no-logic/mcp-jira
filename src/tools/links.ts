@@ -2,7 +2,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JiraClient } from "../jira-client.js";
 import { jsonResult, linkShape, toLink } from "./shapes.js";
-import { createLink } from "./move.js";
+
+// The link reads: <fromKey> <outward description> <toKey>
+export async function createLink(jira: JiraClient, typeName: string, fromKey: string, toKey: string): Promise<void> {
+  await jira.post("/rest/api/2/issueLink", {
+    type: { name: typeName },
+    inwardIssue: { key: fromKey },
+    outwardIssue: { key: toKey },
+  });
+}
 
 export function registerLinkTools(server: McpServer, jira: JiraClient) {
   server.tool(
