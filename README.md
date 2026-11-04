@@ -131,7 +131,7 @@ Read tools (`get_*`, `list_*`, `search_issues`, `find_issues`) return typed resu
 | `search_issues` | Search issues using JQL |
 | `find_issues` | Full-text search across issues (summary, description, comments) |
 | `get_issue` | Get an issue: main fields, description, all comments, links, attachment list, other non-empty fields by name; images only with `includeImages: true` (up to `maxImages`, default 5) |
-| `create_issue` | Create a new issue |
+| `create_issue` | Create a new issue, or a sub-task when `parentKey` is given |
 | `update_issue` | Update an existing issue |
 | `move_issue` | Move an issue to another project (copy with comments, attachments and links, link to original, close original) |
 | `link_issues` | Link two issues (link type, default Relates) |
@@ -144,7 +144,7 @@ Read tools (`get_*`, `list_*`, `search_issues`, `find_issues`) return typed resu
 | `get_transitions` | Get available status transitions |
 | `transition_issue` | Change issue status |
 | `list_attachments` | List attachments on an issue, oldest first |
-| `get_attachment` | Download and display chosen image attachments (`attachmentId` or `attachmentIds`, max 10, IDs from `get_issue` / `list_attachments`); reports per ID what was downloaded |
+| `get_attachment` | Read chosen attachments (`attachmentId` or `attachmentIds`, max 10, IDs from `get_issue` / `list_attachments`): images are shown, text files (logs, JSON, CSV...) are returned as text with paging and grep, any file can be saved locally with `saveTo`; reports per ID what was downloaded |
 | `delete_attachment` | Delete an attachment from an issue (by ID or unique filename) |
 | `list_boards` | List Scrum/Kanban boards |
 | `get_sprints` | Get sprints for a board |
