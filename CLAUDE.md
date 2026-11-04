@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-MCP (Model Context Protocol) server for Jira Server/Data Center integration. Exposes 17 tools that let Claude browse and manage Jira projects, issues, boards, sprints, and time tracking via natural language.
+MCP (Model Context Protocol) server for Jira Server/Data Center integration. Exposes 29 tools that let Claude browse and manage Jira projects, issues, boards, sprints, and time tracking via natural language.
 
 ## Build & Run
 
@@ -44,11 +44,12 @@ Each file exports a `register*Tools(server, jira)` function that registers relat
 | `issues.ts` | `search_issues` (JQL), `find_issues` (full-text), `get_issue`, `create_issue`, `update_issue` |
 | `comments.ts` | `get_comments`, `add_comment`, `edit_comment`, `delete_comment` |
 | `transitions.ts` | `get_transitions`, `transition_issue` |
-| `boards.ts` | `list_boards`, `get_sprints` |
+| `boards.ts` | `list_boards`, `get_sprints`, `move_to_sprint`, `move_to_backlog` |
 | `attachments.ts` | `list_attachments`, `get_attachment`, `upload_attachment`, `delete_attachment` |
 | `tempo.ts` | `log_work`, `get_worklogs`, `delete_worklog` |
 | `move.ts` | `move_issue` (clone to another project, link, close original) |
-| `links.ts` | `link_issues`, `get_issue_links`, `delete_issue_link` |
+| `links.ts` | `link_issues`, `get_issue_links`, `delete_issue_link`; `createLink()` shared with `clone.ts` |
+| `clone.ts` | `clone_issue` (copy in the same or another project, Cloners link) |
 
 ### Patterns
 
@@ -59,6 +60,7 @@ Each file exports a `register*Tools(server, jira)` function that registers relat
 - `get_issue` lists image attachments by ID without downloading them; `includeImages: true` downloads up to `maxImages` (default 5, newest first). Images are opt-in because one issue with dozens of screenshots overflows the per-request image limit of the model (GLM: 50).
 - `get_attachment` supports retrieval by ID, filename, or "latest image" default.
 - Tempo module parses natural time formats ("1h 30m") and resolves issue IDs to keys.
+- `move_issue` copies the issue and closes the original, because a real Move cannot be done with the PAT alone (checked on Jira 8.20, 2026-11-04). There is no REST API for it, and the Move wizard (`/secure/MoveIssue!default.jspa`, which sends issues with sub-tasks to `BulkMigrateDetails.jspa`) keeps its state in the HTTP session: every PAT request gets a new session, so the second step answers "Your session has timed out", and a session opened with the PAT is anonymous on its cookie alone. A real Move would need a password login or a browser session cookie; the server stays token-only, so do not retry this.
 
 ### Adding a new tool
 

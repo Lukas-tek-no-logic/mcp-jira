@@ -51,4 +51,42 @@ export function registerBoardTools(server: McpServer, jira: JiraClient) {
       return jsonResult({ boardId, sprints });
     }
   );
+
+  server.tool(
+    "move_to_sprint",
+    "Move issues to a sprint (active or future), taking them out of the sprint they were in. Get the sprint ID from get_sprints",
+    {
+      issueKeys: z.array(z.string()).min(1).max(MAX_ISSUES_PER_CALL).describe(`Issue keys (e.g. ["PROJ-1", "PROJ-2"]), max ${MAX_ISSUES_PER_CALL}`),
+      sprintId: z.number().describe("The sprint ID (from get_sprints)"),
+    },
+    async ({ issueKeys, sprintId }) => {
+      const sprint = await jira.get<any>(`/rest/agile/1.0/sprint/${sprintId}`);
+      if (sprint.state === "closed") {
+        return {
+          content: [{ type: "text", text: `Sprint "${sprint.name}" (id: ${sprintId}) is closed; issues cannot be added to it. Nothing was moved.` }],
+          isError: true,
+        };
+      } else {
+        await jira.post<void>(`/rest/agile/1.0/sprint/${sprintId}/issue`, { issues: issueKeys });
+        return {
+          content: [{ type: "text", text: `Moved ${issueKeys.join(", ")} to sprint "${sprint.name}" (id: ${sprintId}, ${sprint.state})` }],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "move_to_backlog",
+    "Move issues to the backlog: takes them out of their active or future sprint. Issues in closed sprints keep that history",
+    {
+      issueKeys: z.array(z.string()).min(1).max(MAX_ISSUES_PER_CALL).describe(`Issue keys (e.g. ["PROJ-1", "PROJ-2"]), max ${MAX_ISSUES_PER_CALL}`),
+    },
+    async ({ issueKeys }) => {
+      await jira.post<void>("/rest/agile/1.0/backlog/issue", { issues: issueKeys });
+      return { content: [{ type: "text", text: `Moved ${issueKeys.join(", ")} to the backlog` }] };
+    }
+  );
 }
+
+// Limit of the Jira Agile API for moving issues in one request
+const MAX_ISSUES_PER_CALL = 50;
