@@ -148,6 +148,8 @@ Read tools (`get_*`, `list_*`, `search_issues`, `find_issues`) return typed resu
 | `delete_attachment` | Delete an attachment from an issue (by ID or unique filename) |
 | `list_boards` | List Scrum/Kanban boards |
 | `get_sprints` | Get sprints for a board |
+| `move_to_sprint` | Move issues to an active or future sprint (sprint ID from `get_sprints`) |
+| `move_to_backlog` | Move issues out of their sprint to the backlog |
 | `log_work` | Log time on an issue via Tempo (e.g. "2h 30m") |
 | `get_worklogs` | Get Tempo worklogs for a date range |
 | `delete_worklog` | Delete a Tempo worklog entry |

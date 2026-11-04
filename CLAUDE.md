@@ -44,7 +44,7 @@ Each file exports a `register*Tools(server, jira)` function that registers relat
 | `issues.ts` | `search_issues` (JQL), `find_issues` (full-text), `get_issue`, `create_issue`, `update_issue` |
 | `comments.ts` | `get_comments`, `add_comment`, `edit_comment`, `delete_comment` |
 | `transitions.ts` | `get_transitions`, `transition_issue` |
-| `boards.ts` | `list_boards`, `get_sprints` |
+| `boards.ts` | `list_boards`, `get_sprints`, `move_to_sprint`, `move_to_backlog` |
 | `attachments.ts` | `list_attachments`, `get_attachment`, `upload_attachment`, `delete_attachment` |
 | `tempo.ts` | `log_work`, `get_worklogs`, `delete_worklog` |
 | `move.ts` | `move_issue` (clone to another project, link, close original) |
