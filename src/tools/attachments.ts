@@ -1,11 +1,38 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "fs";
+import { isAbsolute } from "path";
 import { JiraClient } from "../jira-client.js";
 import { IMAGE_MIME_TYPES, attachmentShape, jsonResult, sortByCreation, toAttachment } from "./shapes.js";
+import {
+  DEFAULT_CONTEXT_LINES,
+  DEFAULT_MAX_LINES,
+  MAX_INLINE_TEXT_BYTES,
+  isKnownBinary,
+  isText,
+  readText,
+  saveAttachment,
+} from "./attachment-files.js";
 
 // Keeps one call well under the per-request image limit of vision models (GLM: 50)
 const MAX_IMAGES_PER_CALL = 10;
+
+// Why a non-image attachment cannot be read inline, decided before the download; undefined = try as text
+function textRefusal(target: any, requestCount: number): string | undefined {
+  if (isKnownBinary(target.mimeType)) {
+    return notTextError(target);
+  } else if (target.size > MAX_INLINE_TEXT_BYTES) {
+    return `Has ${target.size} bytes, more than the ${MAX_INLINE_TEXT_BYTES} bytes that can be read inline. Use saveTo to download it to a local directory.`;
+  } else if (requestCount > 1) {
+    return "Not an image. When several attachments are requested only images are shown: request this one alone to read it as text, or use saveTo.";
+  } else {
+    return undefined;
+  }
+}
+
+function notTextError(target: any): string {
+  return `${target.mimeType} is not a text file and cannot be shown. Use saveTo to download it to a local directory.`;
+}
 
 export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
   server.registerTool(
@@ -28,13 +55,22 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
     "get_attachment",
     {
       description:
-        "Download and display image attachments from a Jira issue. Pick them by ID from the attachment list " +
-        "returned by get_issue or list_attachments; only the chosen images are downloaded",
+        "Read attachments of a Jira issue. Pick them by ID from the attachment list returned by get_issue or " +
+        "list_attachments; only the chosen ones are downloaded. Images are shown as images. Text files (logs, JSON, XML, " +
+        `CSV...) up to ${MAX_INLINE_TEXT_BYTES / 1024 / 1024} MB are returned as text (UTF-8, UTF-16 by BOM, or ` +
+        "windows-1250 if not valid UTF-8), in pages of lines or filtered with a regex (grep); read one text file per call. " +
+        "Any file, including binary or larger ones (zip, pdf, docx), can be saved to a local directory with saveTo",
       inputSchema: {
         issueKey: z.string().describe("The issue key (e.g. PROJ-123)"),
         attachmentId: z.string().optional().describe("Specific attachment ID. If no ID or filename is given, returns the latest image attachment."),
-        attachmentIds: z.array(z.string()).optional().describe(`Several attachment IDs to download in one call (max ${MAX_IMAGES_PER_CALL})`),
+        attachmentIds: z.array(z.string()).optional().describe(`Several attachment IDs in one call (max ${MAX_IMAGES_PER_CALL}): images, or files to save with saveTo`),
         filename: z.string().optional().describe("Attachment filename to find. If no ID or filename is given, returns the latest image attachment."),
+        startLine: z.number().int().min(1).optional().describe("Text files only: first line to read (1-based). Default 1. With grep, the line where the search starts."),
+        maxLines: z.number().int().min(1).optional().describe(`Text files only: maximum number of lines to return. Default ${DEFAULT_MAX_LINES}.`),
+        grep: z.string().optional().describe("Text files only: regular expression (JavaScript syntax). Returns only matching lines, with line numbers and context, e.g. \"ERROR|Exception\"."),
+        ignoreCase: z.boolean().optional().describe("Text files only, with grep: match regardless of letter case. Default false."),
+        contextLines: z.number().int().min(0).optional().describe(`Text files only, with grep: lines of context before and after each match. Default ${DEFAULT_CONTEXT_LINES}.`),
+        saveTo: z.string().optional().describe("Absolute path of a local directory. If given, the attachments are saved there (the directory is created if needed) and the file paths are returned instead of the content. An existing file is never overwritten: the attachment ID is added to the name."),
       },
       outputSchema: {
         issueKey: z.string(),
@@ -43,13 +79,27 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
           id: z.string().optional(),
           filename: z.string().optional(),
           mimeType: z.string().optional(),
-          downloaded: z.boolean().describe("The image is included in this result"),
+          size: z.number().optional().describe("Size in bytes"),
+          downloaded: z.boolean().describe("The image or text is included in this result, or the file was saved to savedTo"),
+          savedTo: z.string().optional().describe("Local path of the saved file (with saveTo)"),
+          text: z.object({
+            encoding: z.string(),
+            totalLines: z.number(),
+            status: z.string().describe("Which lines are shown and how to get more (call again with startLine)"),
+            content: z.string().describe("The lines; with grep, \"N:line\" for matches, \"N-line\" for context, groups separated by \"--\""),
+          }).optional().describe("Content of a text attachment"),
           error: z.string().optional(),
         })),
         available: z.array(attachmentShape).optional().describe("All attachments on the issue, when a requested one was not found"),
       },
     },
-    async ({ issueKey, attachmentId, attachmentIds, filename }) => {
+    async ({ issueKey, attachmentId, attachmentIds, filename, startLine, maxLines, grep, ignoreCase, contextLines, saveTo }) => {
+      if (saveTo && !isAbsolute(saveTo)) {
+        return {
+          content: [{ type: "text", text: `saveTo must be an absolute directory path, got: ${saveTo}. Nothing was downloaded.` }],
+          isError: true,
+        };
+      }
       if (attachmentIds && attachmentIds.length > MAX_IMAGES_PER_CALL) {
         return {
           content: [{ type: "text", text: `At most ${MAX_IMAGES_PER_CALL} attachments per call. Nothing was downloaded.` }],
@@ -76,25 +126,50 @@ export function registerAttachmentTools(server: McpServer, jira: JiraClient) {
 
       const results: any[] = [];
       const images: any[] = [];
+      const textOptions = { startLine, maxLines, grep, ignoreCase, contextLines };
       for (const { requested, target } of requests) {
         if (!target) {
           results.push({ requested, downloaded: false, error: "Not found on this issue" });
           continue;
         }
-        const result = { requested, id: target.id, filename: target.filename, mimeType: target.mimeType };
-        if (!IMAGE_MIME_TYPES.has(target.mimeType)) {
-          results.push({ ...result, downloaded: false, error: "Not an image, cannot display" });
+        const result = { requested, id: target.id, filename: target.filename, mimeType: target.mimeType, size: target.size };
+        const isImage = IMAGE_MIME_TYPES.has(target.mimeType);
+        if (!saveTo && !isImage) {
+          const refusal = textRefusal(target, requests.length);
+          if (refusal) {
+            results.push({ ...result, downloaded: false, error: refusal });
+            continue;
+          }
+        }
+
+        let buffer: Buffer;
+        try {
+          buffer = await jira.getBuffer(target.content);
+        } catch {
+          results.push({ ...result, downloaded: false, error: "Download failed" });
           continue;
         }
-        try {
-          const buffer = await jira.getBuffer(target.content);
+
+        if (saveTo) {
+          try {
+            results.push({ ...result, downloaded: true, savedTo: await saveAttachment(buffer, target, saveTo) });
+          } catch (error) {
+            results.push({ ...result, downloaded: false, error: `Saving failed: ${(error as Error).message}` });
+          }
+        } else if (isImage) {
           images.push(
             { type: "text", text: `Attachment: ${target.filename} (id: ${target.id}, ${target.mimeType})` },
             { type: "image", data: buffer.toString("base64"), mimeType: target.mimeType },
           );
           results.push({ ...result, downloaded: true });
-        } catch {
-          results.push({ ...result, downloaded: false, error: "Download failed" });
+        } else if (isText(buffer, target.mimeType)) {
+          try {
+            results.push({ ...result, downloaded: true, text: readText(buffer, textOptions) });
+          } catch (error) {
+            results.push({ ...result, downloaded: false, error: (error as Error).message });
+          }
+        } else {
+          results.push({ ...result, downloaded: false, error: notTextError(target) });
         }
       }
 

@@ -88,7 +88,7 @@ export const attachmentShape = z.object({
   size: z.number().describe("Size in bytes"),
   created: z.string(),
   author: z.string().optional(),
-  isImage: z.boolean().describe("Can be viewed with get_attachment"),
+  isImage: z.boolean().describe("Shown as an image by get_attachment"),
 });
 
 export function toAttachment(attachment: any) {

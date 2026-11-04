@@ -144,7 +144,7 @@ Read tools (`get_*`, `list_*`, `search_issues`, `find_issues`) return typed resu
 | `get_transitions` | Get available status transitions |
 | `transition_issue` | Change issue status |
 | `list_attachments` | List attachments on an issue, oldest first |
-| `get_attachment` | Download and display chosen image attachments (`attachmentId` or `attachmentIds`, max 10, IDs from `get_issue` / `list_attachments`); reports per ID what was downloaded |
+| `get_attachment` | Read chosen attachments (`attachmentId` or `attachmentIds`, max 10, IDs from `get_issue` / `list_attachments`): images are shown, text files (logs, JSON, CSV...) are returned as text with paging and grep, any file can be saved locally with `saveTo`; reports per ID what was downloaded |
 | `delete_attachment` | Delete an attachment from an issue (by ID or unique filename) |
 | `list_boards` | List Scrum/Kanban boards |
 | `get_sprints` | Get sprints for a board |
